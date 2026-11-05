@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rock Paper Scissors - 2 Player & AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #264a30;
+            font-family: 'Fredoka', sans-serif;
+            overflow: hidden;
+            height: 100dvh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Main Game Board Container */
+        #game-board {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 500px;
+            background-color: #469d52;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        @media (min-width: 520px) {
+            #game-board {
+                height: 94dvh;
+                border-radius: 36px;
+                border: 8px solid #1e1e1e;
+            }
+        }
+
+        /* Animations for Hands */
+        @keyframes shakeTop {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(18px); }
+        }
+
+        @keyframes shakeBottom {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-18px); }
+        }
+
+        .shaking-top {
+            animation: shakeTop 0.45s ease-in-out infinite;
+        }
+
+        .shaking-bottom {
+            animation: shakeBottom 0.45s ease-in-out infinite;
+        }
+
+        /* Arm transitions */
+        .arm-wrapper {
+            transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+            will-change: transform;
+        }
+
+        /* Retracted vs Extended Positions */
+        .top-extended {
+            transform: translateY(0);
+        }
+        .top-retracted {
+            transform: translateY(-105px);
+        }
+        .top-clash {
+            transform: translateY(28px) scale(1.06);
+        }
+
+        .bottom-extended {
+            transform: translateY(0);
+        }
+        .bottom-retracted {
+            transform: translateY(105px);
+        }
+        .bottom-clash {
+            transform: translateY(-28px) scale(1.06);
+        }
+
+        /* Action Choice Buttons */
+        .choice-btn {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            background-color: #556068;
+            border: 8px solid #000000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.12s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 6px 0 rgba(0,0,0,0.22);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @media (max-height: 700px) {
+            .choice-btn {
+                width: 82px;
+                height: 82px;
+                border-width: 7px;
+            }
+        }
+
+        .choice-btn:active:not(.disabled) {
+            transform: scale(0.92);
+        }
+
+        .choice-btn.selected-p1 {
+            background-color: #6b7983;
+            box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.65);
+        }
+
+        .choice-btn.selected-p2 {
+            background-color: #6b7983;
+            box-shadow: 0 0 0 4px rgba(15, 169, 249, 0.65);
+        }
+
+        /* Dimmed Icon State */
+        .choice-btn.dimmed .btn-hand-svg {
+            opacity: 0.35;
+        }
+
+        /* Red X overlay on timeout */
+        .red-x-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 20;
+        }
+
+        .choice-btn.timeout-x .red-x-overlay {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .choice-btn.timeout-x .btn-hand-svg {
+            opacity: 0.3;
+        }
+
+        /* Center Countdown Number */
+        #center-countdown {
+            font-size: 92px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.38);
+            transform: rotate(-90deg);
+            line-height: 1;
+            pointer-events: none;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+
+        .pop-scale {
+            animation: popScale 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes popScale {
+            0% { transform: rotate(-90deg) scale(0.5); opacity: 0.1; }
+            60% { transform: rotate(-90deg) scale(1.18); opacity: 0.55; }
+            100% { transform: rotate(-90deg) scale(1); opacity: 0.38; }
+        }
+
+        /* Floating HUD elements (Score & Exit) */
+        .hud-element {
+            background: #ffffff;
+            border: 4px solid #1e1e1e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.25);
+            margin-left: 16px;
+            transition: transform 0.15s ease, background-color 0.1s ease, box-shadow 0.1s ease;
+        }
+
+        .hud-element.score-board {
+            width: 52px;
+            height: 110px;
+            border-radius: 30px;
+        }
+
+        .hud-element.exit-btn {
+            width: 52px;
+            height: 52px;
+            border-radius: 16px; /* Squircle shape */
+            cursor: pointer;
+        }
+
+        .hud-element.exit-btn:hover {
+            background-color: #f0f0f0;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0 rgba(0,0,0,0.25);
+        }
+
+        .hud-element.exit-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 rgba(0,0,0,0.25);
+        }
+
+        .vertical-text {
+            transform: rotate(-90deg);
+            white-space: nowrap;
+            font-weight: 700;
+            font-size: 22px;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Keyboard Hint Badge for Laptop Users */
+        .key-badge {
+            position: absolute;
+            bottom: -10px;
+            background: #18181b;
+            color: #fff;
+            font-size: 11px;
+            padding: 1px 7px;
+            border-radius: 6px;
+            border: 2px solid #000;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            pointer-events: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .key-badge-top {
+            top: -10px;
+            bottom: auto;
+        }
+
+        @media (pointer: coarse) {
+            .key-badge {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-board">
+
+        <!-- ================= MENU OVERLAY ================= -->
+        <div id="menu-screen" class="absolute inset-0 z-50 bg-[#469d52] flex flex-col justify-center items-center p-6 text-center select-none">
+
+            <!-- Title & Mode Buttons -->
+            <div class="w-full max-w-xs flex flex-col items-center gap-4 z-10">
+                <div class="bg-black/20 px-4 py-1.5 rounded-full text-white/90 text-sm tracking-widest uppercase font-bold">
+                    2 Player Battle Games
+                </div>
+                <h1 class="text-white text-4xl sm:text-5xl font-bold tracking-wide drop-shadow-[0_4px_0_rgba(0,0,0,0.35)] leading-tight">
+                    ROCK PAPER<br>SCISSORS
+                </h1>
+
+                <!-- Target Score Selector -->
+                <div class="flex items-center gap-2 bg-black/20 p-1.5 rounded-2xl border-2 border-black/30 my-1">
+                    <span class="text-white text-sm px-2 font-bold">FIRST TO:</span>
+                    <button onclick="setWinTarget(3)" id="target-3" class="target-btn bg-white text-black px-3.5 py-1 rounded-xl font-bold text-sm shadow">3</button>
+                    <button onclick="setWinTarget(5)" id="target-5" class="target-btn text-white hover:bg-white/10 px-3.5 py-1 rounded-xl font-bold text-sm">5</button>
+                    <button onclick="setWinTarget(99)" id="target-99" class="target-btn text-white hover:bg-white/10 px-3.5 py-1 rounded-xl font-bold text-sm">∞</button>
+                </div>
+
+                <!-- 1st Mode: Player vs Player -->
+                <button onclick="startGame('PVP')" class="w-full py-4 px-6 bg-[#ff5959] hover:bg-[#ff4242] active:translate-y-1 text-white text-xl font-bold rounded-2xl border-[5px] border-black shadow-[0_6px_0_#000] transition-all flex items-center justify-between group">
+                    <span class="flex items-center gap-3">
+                        <span class="w-3.5 h-3.5 rounded-full bg-white inline-block"></span>
+                        PLAYER vs PLAYER
+                    </span>
+                    <span class="text-sm bg-black/25 px-2.5 py-1 rounded-lg">2P</span>
+                </button>
+
+                <!-- 2nd Mode: Player vs AI -->
+                <button onclick="startGame('AI')" class="w-full py-4 px-6 bg-[#0ca5f9] hover:bg-[#0095e8] active:translate-y-1 text-white text-xl font-bold rounded-2xl border-[5px] border-black shadow-[0_6px_0_#000] transition-all flex items-center justify-between group">
+                    <span class="flex items-center gap-3">
+                        <span class="w-3.5 h-3.5 rounded-full bg-white inline-block"></span>
+                        PLAYER vs AI
+                    </span>
+                    <span class="text-sm bg-black/25 px-2.5 py-1 rounded-lg">1P</span>
+                </button>
+
+                <!-- Laptop Controls Info -->
+                <div class="hidden sm:flex flex-col gap-1 text-xs text-white/85 bg-black/20 px-4 py-2.5 rounded-xl w-full mt-1">
+                    <div class="font-bold text-white uppercase tracking-wider">Laptop Keyboard or Mouse</div>
+                    <div class="flex justify-between">
+                        <span><strong class="text-[#ff8585]">Red (Bottom):</strong> A / S / D</span>
+                        <span><strong class="text-[#6fd0ff]">Blue (Top):</strong> J / K / L</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= LEFT SIDE CONTROLS (SCORE & EXIT) ================= -->
+        <div class="absolute left-0 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-30">
+            <!-- Score Board (Floating Pill) -->
+            <div class="hud-element score-board">
+                <div class="vertical-text">
+                    <span id="score-p1" class="text-[#ff5959]">0</span>
+                    <span class="text-[#455a64] text-lg mt-0.5">•</span>
+                    <span id="score-p2" class="text-[#0ca5f9]">0</span>
+                </div>
+            </div>
+
+            <!-- Exit Button (Floating Squircle) -->
+            <button class="hud-element exit-btn" onclick="exitToMenu()" aria-label="Exit to menu">
+                <svg class="w-6 h-6 text-[#1e1e1e]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+            </button>
+        </div>
+
+        <!-- ================= TOP PLAYER (BLUE / AI) AREA ================= -->
+        <div class="relative w-full h-[42%] flex flex-col items-center justify-start">
+            
+            <!-- Blue Arm & Big Hand -->
+            <div id="top-arm-wrapper" class="arm-wrapper top-extended flex flex-col items-center z-10 pointer-events-none">
+                <!-- Blue Vertical Stick extending off-screen top -->
+                <div class="w-[46px] h-[240px] -mt-[165px] bg-[#0ca5f9] border-x-[9px] border-black shadow-[6px_0_0_rgba(0,0,0,0.18)]"></div>
+                <!-- Top Hand SVG Wrapper (Rotated 180deg so it faces downward) -->
+                <div id="top-big-hand-shake" class=" -mt-[10px]">
+                    <div id="top-big-hand" class="w-[195px] h-[195px] sm:w-[215px] sm:h-[215px] transform rotate-180 scale-x-[-1] drop-shadow-[-6px_-6px_0px_rgba(0,0,0,0.2)]">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top Player 3 Buttons (Hidden in AI Mode just like image 2!) -->
+            <div id="top-controls" class="absolute top-5 left-0 right-0 flex justify-center items-center gap-3 sm:gap-5 px-3 z-20">
+                <!-- Left button from screen perspective: Scissors (rotated 180deg) -->
+                <button id="btn-p2-scissors" class="choice-btn" onclick="handleChoice(2, 'scissors')">
+                    <div class="btn-hand-svg w-14 h-14 transform rotate-180" data-icon="scissors"></div>
+                    <div class="red-x-overlay" data-x></div>
+                    <span class="key-badge key-badge-top">J</span>
+                </button>
+
+                <!-- Center button: Paper (rotated 180deg) -->
+                <button id="btn-p2-paper" class="choice-btn" onclick="handleChoice(2, 'paper')">
+                    <div class="btn-hand-svg w-14 h-14 transform rotate-180" data-icon="paper"></div>
+                    <div class="red-x-overlay" data-x></div>
+                    <span class="key-badge key-badge-top">K</span>
+                </button>
+
+                <!-- Right button: Rock (rotated 180deg) -->
+                <button id="btn-p2-rock" class="choice-btn" onclick="handleChoice(2, 'rock')">
+                    <div class="btn-hand-svg w-14 h-14 transform rotate-180" data-icon="rock"></div>
+                    <div class="red-x-overlay" data-x></div>
+                    <span class="key-badge key-badge-top">L</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ================= CENTER STATUS / COUNTDOWN ================= -->
+        <div class="relative w-full h-[16%] flex items-center justify-center pointer-events-none z-20">
+            <div id="center-countdown">3</div>
+            <div id="round-banner" class="hidden absolute bg-black/80 text-white px-5 py-2 rounded-full text-lg font-bold tracking-wider uppercase border-2 border-white/20 shadow-lg">
+                TIME OUT!
+            </div>
+        </div>
+
+        <!-- ================= BOTTOM PLAYER (RED) AREA ================= -->
+        <div class="relative w-full h-[42%] flex flex-col items-center justify-end">
+
+            <!-- Red Arm & Big Hand -->
+            <div id="bottom-arm-wrapper" class="arm-wrapper bottom-extended flex flex-col items-center z-10 pointer-events-none">
+                <!-- Bottom Hand SVG Wrapper -->
+                <div id="bottom-big-hand-shake" class="-mb-[10px]">
+                    <div id="bottom-big-hand" class="w-[195px] h-[195px] sm:w-[215px] sm:h-[215px] drop-shadow-[6px_6px_0px_rgba(0,0,0,0.2)]">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                <!-- Red Vertical Stick extending off-screen bottom -->
+                <div class="w-[46px] h-[240px] -mb-[165px] bg-[#ff5959] border-x-[9px] border-black shadow-[6px_0_0_rgba(0,0,0,0.18)]"></div>
+            </div>
+
+            <!-- Bottom Player 3 Buttons (Rock, Paper, Scissors) -->
+            <div id="bottom-controls" class="absolute bottom-5 left-0 right-0 flex justify-center items-center gap-3 sm:gap-5 px-3 z-20">
+                <!-- Left: Rock -->
+                <button id="btn-p1-rock" class="choice-btn" onclick="handleChoice(1, 'rock')">
+                    <div class="btn-hand-svg w-14 h-14" data-icon="rock"></div>
+                    <div class="red-x-overlay" data-x></div>
+                    <span class="key-badge">A</span>
+                </button>
+
+                <!-- Center: Paper -->
+                <button id="btn-p1-paper" class="choice-btn" onclick="handleChoice(1, 'paper')">
+                    <div class="btn-hand-svg w-14 h-14" data-icon="paper"></div>
+                    <div class="red-x-overlay" data-x></div>
+                    <span class="key-badge">S</span>
+                </button>
+
+                <!-- Right: Scissors -->
+                <button id="btn-p1-scissors" class="choice-btn" onclick="handleChoice(1, 'scissors')">
+                    <div class="btn-hand-svg w-14 h-14" data-icon="scissors"></div>
+                    <div class="red-x-overlay" data-x></div>
+                    <span class="key-badge">D</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ================= MATCH WINNER MODAL ================= -->
+        <div id="winner-modal" class="hidden absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex flex-col justify-center items-center p-6 text-center">
+            <div class="bg-[#469d52] border-[6px] border-black rounded-3xl p-6 w-full max-w-xs shadow-[0_12px_0_#000] flex flex-col items-center gap-4">
+                <div id="winner-badge" class="px-4 py-1 rounded-full text-white font-bold text-sm uppercase tracking-wider bg-[#ff5959] border-2 border-black">
+                    MATCH FINISHED
+                </div>
+                <h2 id="winner-title" class="text-3xl font-bold text-white drop-shadow-[0_3px_0_rgba(0,0,0,0.4)]">
+                    RED WINS!
+                </h2>
+                <div id="winner-scoreline" class="text-2xl font-bold bg-white px-6 py-2 rounded-2xl border-4 border-black">
+                    <span class="text-[#ff5959]">3</span> - <span class="text-[#0ca5f9]">1</span>
+                </div>
+                <div class="flex gap-3 w-full mt-2">
+                    <button onclick="restartMatch()" class="flex-1 py-3 bg-[#ffca28] hover:bg-[#ffc107] active:translate-y-0.5 text-black font-bold rounded-xl border-4 border-black shadow-[0_4px_0_#000]">
+                        PLAY AGAIN
+                    </button>
+                    <button onclick="exitToMenu()" class="py-3 px-4 bg-white hover:bg-gray-100 active:translate-y-0.5 text-black font-bold rounded-xl border-4 border-black shadow-[0_4px_0_#000]">
+                        MENU
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /* =====================================================================
+           CUSTOM BOLD CARTOON SVG ASSETS (MATCHING SCREENSHOTS 1, 2, AND 3)
+           ===================================================================== */
+
+        // Big Hand SVGs (Bold black stroke, crisp white fill, cartoon fist/paper/scissors)
+        const BIG_HAND_SVGS = {
+            rock: `
+                <svg viewBox="0 0 200 200" class="w-full h-full overflow-visible">
+                    <!-- Palm Base -->
+                    <path d="M 42 95 L 42 132 C 42 166 68 182 102 182 C 138 182 162 164 162 128 L 162 96 C 162 78 148 68 130 68 L 58 68 C 48 68 42 78 42 95 Z"
+                          fill="#ffffff" stroke="#000000" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/>
+                    <!-- 4 Curled Fingers -->
+                    <rect x="42" y="54" width="29" height="58" rx="14.5" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <rect x="71" y="46" width="30" height="62" rx="15" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <rect x="101" y="49" width="30" height="59" rx="15" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <rect x="131" y="58" width="29" height="52" rx="14.5" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <!-- Cover lower finger seams inside palm -->
+                    <path d="M 49 102 L 155 102 L 155 135 C 155 160 132 174 102 174 C 72 174 49 160 49 135 Z" fill="#ffffff"/>
+                    <!-- Overlapping Thumb & Crease -->
+                    <path d="M 94 102 L 138 102 C 152 102 160 92 160 80 C 160 68 150 60 135 60 L 105 60 C 90 60 84 72 84 82 C 84 95 92 102 94 102 Z"
+                          fill="#ffffff" stroke="#000000" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/>
+                    <path d="M 138 102 C 110 102 102 115 98 136"
+                          fill="none" stroke="#000000" stroke-width="14" stroke-linecap="round"/>
+                </svg>
+            `,
+            paper: `
+                <svg viewBox="0 0 200 200" class="w-full h-full overflow-visible">
+                    <!-- 4 Extended Fingers -->
+                    <rect x="46" y="34" width="26" height="90" rx="13" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <rect x="73" y="20" width="27" height="100" rx="13.5" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <rect x="101" y="26" width="27" height="94" rx="13.5" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <rect x="129" y="44" width="25" height="82" rx="12.5" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <!-- Open Palm -->
+                    <path d="M 46 105 L 46 134 C 46 165 70 182 102 182 C 136 182 156 164 156 132 L 156 105"
+                          fill="#ffffff" stroke="#000000" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/>
+                    <!-- Interior Mask -->
+                    <path d="M 53 98 L 149 98 L 149 134 C 149 158 130 174 102 174 C 74 174 53 158 53 134 Z" fill="#ffffff"/>
+                    <!-- Thumb tucked on side -->
+                    <path d="M 146 86 C 162 86 172 98 168 116 C 164 134 148 148 132 148"
+                          fill="#ffffff" stroke="#000000" stroke-width="14" stroke-linecap="round"/>
+                    <path d="M 108 136 C 116 122 128 114 144 114"
+                          fill="none" stroke="#000000" stroke-width="12" stroke-linecap="round"/>
+                </svg>
+            `,
+            scissors: `
+                <svg viewBox="0 0 200 200" class="w-full h-full overflow-visible">
+                    <!-- V-Shaped Index & Middle Fingers -->
+                    <g transform="rotate(-14 92 110)">
+                        <rect x="76" y="18" width="28" height="102" rx="14" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    </g>
+                    <g transform="rotate(14 122 110)">
+                        <rect x="108" y="20" width="28" height="100" rx="14" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    </g>
+                    <!-- Palm Base -->
+                    <path d="M 44 105 L 44 134 C 44 166 68 182 102 182 C 136 182 158 164 158 130 L 158 104"
+                          fill="#ffffff" stroke="#000000" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/>
+                    <path d="M 51 100 L 151 100 L 151 134 C 151 158 130 174 102 174 C 74 174 51 158 51 134 Z" fill="#ffffff"/>
+                    <!-- 2 Curled Fingers on Left -->
+                    <rect x="44" y="68" width="27" height="52" rx="13.5" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <rect x="71" y="64" width="27" height="54" rx="13.5" fill="#ffffff" stroke="#000000" stroke-width="14"/>
+                    <!-- Thumb Locking Over -->
+                    <path d="M 88 114 L 136 114 C 150 114 158 104 158 92 C 158 80 148 72 134 72 L 104 72 C 90 72 82 82 82 94 C 82 106 88 114 88 114 Z"
+                          fill="#ffffff" stroke="#000000" stroke-width="14" stroke-linejoin="round"/>
+                    <path d="M 130 114 C 108 114 98 126 95 144"
+                          fill="none" stroke="#000000" stroke-width="13" stroke-linecap="round"/>
+                </svg>
+            `
+        };
+
+        // Red Cross 'X' SVG for Image 3 (when time runs out or player misses chance)
+        const RED_X_SVG = `
+            <svg viewBox="0 0 100 100" class="w-16 h-16 drop-shadow-[0_3px_2px_rgba(0,0,0,0.4)]">
+                <path d="M 28 20 L 50 42 L 72 20 L 82 30 L 60 52 L 82 74 L 72 84 L 50 62 L 28 84 L 18 74 L 40 52 L 18 30 Z"
+                      fill="#ff1e1e" stroke="#000000" stroke-width="6" stroke-linejoin="round"/>
+            </svg>
+        `;
+
+        /* =====================================================================
+           WEB AUDIO SYNTHESIZER (TACTILE GAME SFX, NO EXTERNAL FILES NEEDED)
+           ===================================================================== */
+        let audioCtx = null;
+
+        function playTone(freq, type = 'sine', duration = 0.1, delay = 0, vol = 0.12) {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime + delay);
+
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime + delay);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + duration);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(audioCtx.currentTime + delay);
+                osc.stop(audioCtx.currentTime + delay + duration);
+            } catch (e) {
+                // Ignore audio errors if blocked by browser autoplay policy
+            }
+        }
+
+        function sfxTick() {
+            playTone(380, 'triangle', 0.08, 0, 0.12);
+        }
+        function sfxSelect() {
+            playTone(580, 'sine', 0.07, 0, 0.1);
+        }
+        function sfxReveal() {
+            playTone(300, 'triangle', 0.09, 0, 0.15);
+            playTone(520, 'triangle', 0.14, 0.06, 0.15);
+        }
+        function sfxWinRound() {
+            playTone(523.25, 'sine', 0.12, 0, 0.15);
+            playTone(659.25, 'sine', 0.12, 0.1, 0.15);
+            playTone(783.99, 'sine', 0.22, 0.2, 0.18);
+        }
+        function sfxTimeout() {
+            playTone(210, 'sawtooth', 0.18, 0, 0.14);
+            playTone(155, 'sawtooth', 0.26, 0.15, 0.14);
+        }
+
+        /* =====================================================================
+           GAME STATE & LOGIC
+           ===================================================================== */
+        let gameMode = 'PVP'; // 'PVP' (Image 1) or 'AI' (Image 2)
+        let winTarget = 3;
+        let scoreP1 = 0; // Red (Bottom)
+        let scoreP2 = 0; // Blue (Top)
+
+        let choiceP1 = null;
+        let choiceP2 = null;
+        let roundState = 'IDLE'; // 'COUNTDOWN', 'RESOLVING', 'IDLE'
+
+        let countdownValue = 3;
+        let countdownTimer = null;
+        let nextRoundTimeout = null;
+        let aiPickTimeout = null;
+
+        // Initialize Button & Hand SVGs on Load
+        function initAssets() {
+            // Populate small button icons
+            document.querySelectorAll('.btn-hand-svg').forEach(el => {
+                const type = el.getAttribute('data-icon');
+                el.innerHTML = BIG_HAND_SVGS[type];
+            });
+
+            // Populate Red X overlays
+            document.querySelectorAll('[data-x]').forEach(el => {
+                el.innerHTML = RED_X_SVG;
+            });
+
+            // Populate default big hands
+            setBigHands('rock', 'rock');
+        }
+
+        function setBigHands(p1Move, p2Move) {
+            document.getElementById('bottom-big-hand').innerHTML = BIG_HAND_SVGS[p1Move || 'rock'];
+            document.getElementById('top-big-hand').innerHTML = BIG_HAND_SVGS[p2Move || 'rock'];
+        }
+
+        function setWinTarget(target) {
+            winTarget = target;
+            document.querySelectorAll('.target-btn').forEach(btn => {
+                btn.className = 'target-btn text-white hover:bg-white/10 px-3.5 py-1 rounded-xl font-bold text-sm transition';
+            });
+            const activeBtn = document.getElementById(`target-${target}`);
+            if (activeBtn) {
+                activeBtn.className = 'target-btn bg-white text-black px-3.5 py-1 rounded-xl font-bold text-sm shadow transition';
+            }
+            sfxSelect();
+        }
+
+        function startGame(mode) {
+            gameMode = mode;
+            scoreP1 = 0;
+            scoreP2 = 0;
+            updateScoreUI();
+
+            // Show/Hide Top 3 Buttons depending on PVP (Image 1) vs AI (Image 2)
+            const topControls = document.getElementById('top-controls');
+            if (gameMode === 'AI') {
+                topControls.classList.add('hidden');
+            } else {
+                topControls.classList.remove('hidden');
+            }
+
+            document.getElementById('menu-screen').classList.add('hidden');
+            document.getElementById('winner-modal').classList.add('hidden');
+
+            sfxSelect();
+            startNewRound();
+        }
+
+        function exitToMenu() {
+            clearAllTimers();
+            roundState = 'IDLE';
+            document.getElementById('menu-screen').classList.remove('hidden');
+            document.getElementById('winner-modal').classList.add('hidden');
+            sfxSelect();
+        }
+
+        function restartMatch() {
+            document.getElementById('winner-modal').classList.add('hidden');
+            scoreP1 = 0;
+            scoreP2 = 0;
+            updateScoreUI();
+            startNewRound();
+        }
+
+        function clearAllTimers() {
+            if (countdownTimer) clearInterval(countdownTimer);
+            if (nextRoundTimeout) clearTimeout(nextRoundTimeout);
+            if (aiPickTimeout) clearTimeout(aiPickTimeout);
+        }
+
+        /* =====================================================================
+           ROUND LIFECYCLE (MATCHING SCREENSHOTS 1, 2, AND 3)
+           ===================================================================== */
+        function startNewRound() {
+            clearAllTimers();
+
+            choiceP1 = null;
+            choiceP2 = null;
+            roundState = 'COUNTDOWN';
+            countdownValue = 3;
+
+            // Reset Big Hands to Closed Fists (Rock) Extended toward Center
+            setBigHands('rock', 'rock');
+
+            const topArm = document.getElementById('top-arm-wrapper');
+            const bottomArm = document.getElementById('bottom-arm-wrapper');
+            topArm.className = 'arm-wrapper top-extended flex flex-col items-center z-10 pointer-events-none';
+            bottomArm.className = 'arm-wrapper bottom-extended flex flex-col items-center z-10 pointer-events-none';
+
+            // Gentle idle pumping during countdown
+            document.getElementById('top-big-hand-shake').className = '-mt-[10px] shaking-top';
+            document.getElementById('bottom-big-hand-shake').className = '-mb-[10px] shaking-bottom';
+
+            // Reset All Choice Buttons
+            resetChoiceButtonsVisuals();
+
+            // Hide Banner & Show Countdown "3"
+            const banner = document.getElementById('round-banner');
+            banner.classList.add('hidden');
+
+            const cdEl = document.getElementById('center-countdown');
+            cdEl.classList.remove('hidden');
+            cdEl.textContent = countdownValue;
+            triggerPop(cdEl);
+            sfxTick();
+
+            // If AI mode, schedule AI choice during countdown
+            if (gameMode === 'AI') {
+                const moves = ['rock', 'paper', 'scissors'];
+                aiPickTimeout = setTimeout(() => {
+                    if (roundState === 'COUNTDOWN') {
+                        choiceP2 = moves[Math.floor(Math.random() * moves.length)];
+                    }
+                }, 650);
+            }
+
+            // Tick 3 -> 2 -> 1 -> Evaluate
+            countdownTimer = setInterval(() => {
+                countdownValue--;
+                if (countdownValue > 0) {
+                    cdEl.textContent = countdownValue;
+                    triggerPop(cdEl);
+                    sfxTick();
+
+                    // Early resolve if both players have already locked in their choices
+                    if (choiceP1 && choiceP2) {
+                        clearInterval(countdownTimer);
+                        setTimeout(() => evaluateRound(), 220);
+                    }
+                } else {
+                    clearInterval(countdownTimer);
+                    evaluateRound();
+                }
+            }, 900);
+        }
+
+        function triggerPop(el) {
+            el.classList.remove('pop-scale');
+            void el.offsetWidth;
+            el.classList.add('pop-scale');
+        }
+
+        function resetChoiceButtonsVisuals() {
+            const allBtns = document.querySelectorAll('.choice-btn');
+            allBtns.forEach(btn => {
+                btn.classList.remove('selected-p1', 'selected-p2', 'dimmed', 'timeout-x', 'disabled');
+            });
+
+            // Notice in Image 2 (AI mode), the bottom buttons start subtly dimmed until tapped
+            if (gameMode === 'AI') {
+                ['rock', 'paper', 'scissors'].forEach(m => {
+                    document.getElementById(`btn-p1-${m}`).classList.add('dimmed');
+                });
+            }
+        }
+
+        function handleChoice(player, move) {
+            if (roundState !== 'COUNTDOWN') return;
+            if (player === 2 && gameMode === 'AI') return;
+
+            sfxSelect();
+
+            if (player === 1) {
+                choiceP1 = move;
+                ['rock', 'paper', 'scissors'].forEach(m => {
+                    const btn = document.getElementById(`btn-p1-${m}`);
+                    btn.classList.remove('selected-p1', 'dimmed');
+                    if (m === move) {
+                        btn.classList.add('selected-p1');
+                    } else {
+                        btn.classList.add('dimmed');
+                    }
+                });
+            } else if (player === 2) {
+                choiceP2 = move;
+                ['rock', 'paper', 'scissors'].forEach(m => {
+                    const btn = document.getElementById(`btn-p2-${m}`);
+                    btn.classList.remove('selected-p2', 'dimmed');
+                    if (m === move) {
+                        btn.classList.add('selected-p2');
+                    } else {
+                        btn.classList.add('dimmed');
+                    }
+                });
+            }
+
+            // If both players picked in PVP or P1 picked in AI, resolve briskly
+            if (choiceP1 && choiceP2) {
+                clearInterval(countdownTimer);
+                setTimeout(() => {
+                    if (roundState === 'COUNTDOWN') evaluateRound();
+                }, 220);
+            }
+        }
+
+        /* =====================================================================
+           EVALUATION & IMAGE 3 TIMEOUT / MISSED CHANCE STATE
+           ===================================================================== */
+        function evaluateRound() {
+            if (roundState !== 'COUNTDOWN') return;
+            roundState = 'RESOLVING';
+
+            // Stop hand shaking and hide center number
+            document.getElementById('top-big-hand-shake').className = '-mt-[10px]';
+            document.getElementById('bottom-big-hand-shake').className = '-mb-[10px]';
+            document.getElementById('center-countdown').classList.add('hidden');
+
+            // Lock buttons
+            document.querySelectorAll('.choice-btn').forEach(b => b.classList.add('disabled'));
+
+            const topArm = document.getElementById('top-arm-wrapper');
+            const bottomArm = document.getElementById('bottom-arm-wrapper');
+
+            // CASE 1: Neither player chose in time (Exact match for 3rd screenshot!)
+            // Or one player failed to pick in their chance
+            const p1Missed = !choiceP1;
+            const p2Missed = !choiceP2;
+
+            if (p1Missed || p2Missed) {
+                sfxTimeout();
+
+                // Show Red X on all 3 buttons of the player(s) who missed their chance
+                if (p1Missed) {
+                    ['rock', 'paper', 'scissors'].forEach(m => {
+                        const btn = document.getElementById(`btn-p1-${m}`);
+                        btn.classList.remove('selected-p1');
+                        btn.classList.add('timeout-x');
+                    });
+                    // Retract bottom hand back behind buttons just like Image 3
+                    bottomArm.classList.remove('bottom-extended');
+                    bottomArm.classList.add('bottom-retracted');
+                }
+
+                if (p2Missed) {
+                    ['rock', 'paper', 'scissors'].forEach(m => {
+                        const btn = document.getElementById(`btn-p2-${m}`);
+                        btn.classList.remove('selected-p2');
+                        btn.classList.add('timeout-x');
+                    });
+                    // Retract top hand back behind buttons just like Image 3
+                    topArm.classList.remove('top-extended');
+                    topArm.classList.add('top-retracted');
+                }
+
+                // If only ONE player missed their chance, the active player gets the point!
+                if (!p1Missed && p2Missed) {
+                    setBigHands(choiceP1, 'rock');
+                    scoreP1++;
+                    showBanner('BLUE TOO SLOW! +1 RED');
+                } else if (p1Missed && !p2Missed) {
+                    // In AI mode, if human didn't play in time, top hand also retracts to match image 3 feel or shows AI win
+                    if (gameMode === 'AI') {
+                        topArm.classList.remove('top-extended');
+                        topArm.classList.add('top-retracted');
+                    } else {
+                        setBigHands('rock', choiceP2);
+                    }
+                    scoreP2++;
+                    showBanner('RED TOO SLOW! +1 BLUE');
+                } else {
+                    // Both missed (Exact Image 3 state: both hands retracted behind red X buttons, clean center)
+                }
+
+                updateScoreUI();
+                scheduleNextStep(1600);
+                return;
+            }
+
+            // CASE 2: Both players picked a valid move!
+            sfxReveal();
+            setBigHands(choiceP1, choiceP2);
+
+            // Clash animation toward center
+            topArm.classList.add('top-clash');
+            bottomArm.classList.add('bottom-clash');
+
+            const winner = getWinner(choiceP1, choiceP2);
+
+            setTimeout(() => {
+                if (winner === 1) {
+                    scoreP1++;
+                    sfxWinRound();
+                    bottomArm.style.transform = 'translateY(-42px) scale(1.12)';
+                    topArm.style.transform = 'translateY(-35px) scale(0.92)';
+                } else if (winner === 2) {
+                    scoreP2++;
+                    sfxWinRound();
+                    topArm.style.transform = 'translateY(42px) scale(1.12)';
+                    bottomArm.style.transform = 'translateY(35px) scale(0.92)';
+                } else {
+                    // Draw
+                    sfxTick();
+                    showBanner('DRAW!');
+                }
+                updateScoreUI();
+            }, 250);
+
+            scheduleNextStep(1550);
+        }
+
+        function getWinner(p1, p2) {
+            if (p1 === p2) return 0;
+            if (
+                (p1 === 'rock' && p2 === 'scissors') ||
+                (p1 === 'paper' && p2 === 'rock') ||
+                (p1 === 'scissors' && p2 === 'paper')
+            ) {
+                return 1;
+            }
+            return 2;
+        }
+
+        function showBanner(text) {
+            const banner = document.getElementById('round-banner');
+            banner.textContent = text;
+            banner.classList.remove('hidden');
+        }
+
+        function updateScoreUI() {
+            document.getElementById('score-p1').textContent = scoreP1;
+            document.getElementById('score-p2').textContent = scoreP2;
+        }
+
+        function scheduleNextStep(delayMs) {
+            nextRoundTimeout = setTimeout(() => {
+                // Reset inline transforms from clash
+                document.getElementById('top-arm-wrapper').style.transform = '';
+                document.getElementById('bottom-arm-wrapper').style.transform = '';
+
+                if (scoreP1 >= winTarget || scoreP2 >= winTarget) {
+                    showMatchWinner();
+                } else {
+                    startNewRound();
+                }
+            }, delayMs);
+        }
+
+        function showMatchWinner() {
+            roundState = 'IDLE';
+            const modal = document.getElementById('winner-modal');
+            const title = document.getElementById('winner-title');
+            const badge = document.getElementById('winner-badge');
+            const scoreline = document.getElementById('winner-scoreline');
+
+            const p1Won = scoreP1 > scoreP2;
+            if (p1Won) {
+                title.textContent = gameMode === 'AI' ? 'YOU WIN!' : 'RED PLAYER WINS!';
+                badge.style.backgroundColor = '#ff5959';
+            } else {
+                title.textContent = gameMode === 'AI' ? 'AI WINS!' : 'BLUE PLAYER WINS!';
+                badge.style.backgroundColor = '#0ca5f9';
+            }
+
+            scoreline.innerHTML = `<span class="text-[#ff5959]">${scoreP1}</span> - <span class="text-[#0ca5f9]">${scoreP2}</span>`;
+            modal.classList.remove('hidden');
+        }
+
+        /* =====================================================================
+           LAPTOP KEYBOARD CONTROLS (SO 2 PLAYERS CAN PLAY ON ONE LAPTOP)
+           ===================================================================== */
+        window.addEventListener('keydown', (e) => {
+            if (roundState !== 'COUNTDOWN') return;
+            const key = e.key.toLowerCase();
+
+            // Player 1 (Bottom Red): A = Rock, S = Paper, D = Scissors
+            if (key === 'a') handleChoice(1, 'rock');
+            if (key === 's') handleChoice(1, 'paper');
+            if (key === 'd') handleChoice(1, 'scissors');
+
+            // Player 2 (Top Blue): J = Scissors (Left), K = Paper (Mid), L = Rock (Right)
+            // Or Arrow Keys: Left = Scissors, Down = Paper, Right = Rock
+            if (gameMode === 'PVP') {
+                if (key === 'j' || e.key === 'ArrowLeft') handleChoice(2, 'scissors');
+                if (key === 'k' || e.key === 'ArrowDown') handleChoice(2, 'paper');
+                if (key === 'l' || e.key === 'ArrowRight') handleChoice(2, 'rock');
+            }
+        });
+
+        window.onload = function () {
+            initAssets();
+        };
+    </script>
+</body>
+</html>
